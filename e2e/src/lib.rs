@@ -1,0 +1,305 @@
+
+use rstest::fixture;
+use std::path::PathBuf;
+use std::sync::Arc;
+use testcontainers::core::IntoContainerPort;
+use testcontainers::runners::AsyncRunner;
+use testcontainers::{ContainerAsync, GenericImage, ImageExt};
+use testcontainers_modules::postgres::Postgres;
+use tokio::sync::{Mutex, OnceCell as AsyncOnceCell};
+
+/// Shared test environment that manages container lifecycle
+pub struct TestEnvironment {
+    /// The Postgres container
+    _postgres: ContainerAsync<Postgres>,
+    /// The App container
+    _app: ContainerAsync<GenericImage>,
+    /// Base URL for the REST application under test
+    pub base_url: String,
+
+    /// gRPC endpoint address (e.g. http://host:9090)
+    pub grpc_addr: String,
+
+
+    /// Bearer token obtained by registering a test user at startup.
+    pub auth_token: String,
+
+}
+
+
+
+/// Global singleton for test environment - uses tokio's AsyncOnceCell for proper async initialization
+static TEST_ENV: AsyncOnceCell<Arc<Mutex<TestEnvironment>>> = AsyncOnceCell::const_new();
+
+impl TestEnvironment {
+    /// Get or initialize the shared test environment (guaranteed single initialization)
+    pub async fn get_or_init() -> Arc<Mutex<TestEnvironment>> {
+        TEST_ENV
+            .get_or_init(|| async {
+                let env = Self::init().await.expect("Failed to initialize test environment");
+                Arc::new(Mutex::new(env))
+            })
+            .await
+            .clone()
+    }
+
+    async fn init() -> Result<TestEnvironment, Box<dyn std::error::Error + Send + Sync>> {
+        // Initialize logging for testcontainers (only once, ignore if already initialized)
+        let _ = env_logger::builder()
+            .filter_level(log::LevelFilter::Info)
+            .filter_module("testcontainers", log::LevelFilter::Debug)
+            .is_test(true)
+            .try_init();
+
+        let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("e2e crate should have parent directory")
+            .to_path_buf();
+
+        println!("Project directory: {:?}", project_dir);
+
+        // Start Postgres container
+        println!("Starting Postgres container...");
+        let postgres = Postgres::default()
+            .with_db_name("testdb")
+            .with_user("postgres")
+            .with_password("postgres");
+
+        let postgres_container = postgres.start().await?;
+        
+        let pg_host = postgres_container.get_host().await?;
+        let pg_port = postgres_container.get_host_port_ipv4(5432).await?;
+        let database_url = format!(
+            "postgres://postgres:postgres@{}:{}/testdb",
+            pg_host, pg_port
+        );
+        println!("Postgres available at: {}", database_url);
+
+        // For container-to-container communication on Podman (macOS), use host.containers.internal
+        let database_url_for_app = format!(
+            "postgres://postgres:postgres@host.containers.internal:{}/testdb",
+            pg_port
+        );
+        println!("DATABASE_URL for app: {}", database_url_for_app);
+
+        println!("Starting app container...");
+        let app_image = GenericImage::new("modulaga-config-api", "latest")
+            .with_exposed_port(8080.tcp())
+
+            .with_env_var("DATABASE_URL", &database_url_for_app)
+            .with_env_var("RUST_LOG", "debug");
+        
+        let app_container: ContainerAsync<GenericImage> = app_image.start().await?;
+
+        let app_host = app_container.get_host().await?;
+        let app_port = app_container.get_host_port_ipv4(8080).await?;
+        let base_url = format!("http://{}:{}", app_host, app_port);
+
+        let grpc_port = app_container.get_host_port_ipv4(8080).await?;
+        let grpc_addr = format!("http://{}:{}", app_host, grpc_port);
+        println!("gRPC service available at: {}", grpc_addr);
+
+        println!("App service available at: {}", base_url);
+
+        // Wait for healthy with log streaming
+        Self::wait_for_healthy_with_logs(&base_url, app_container.id()).await?;
+
+
+        // Generate a unique password for this test run so no hardcoded secrets
+        // end up in the test binary or its output.
+        let test_password = {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis();
+            format!("Tp{ms}A!")
+        };
+
+        // Register a reusable test user and obtain a bearer token.
+        let auth_client = reqwest::Client::new();
+        let auth_token = {
+            let resp = auth_client
+                .post(format!("{}/api/auth/register", base_url))
+                .json(&serde_json::json!({
+                    "username": "e2e_test_user",
+                    "password": test_password
+                }))
+                .send()
+                .await?;
+            // If the user already exists, fall back to login.
+            let resp = if resp.status().is_success() {
+                resp
+            } else {
+                auth_client
+                    .post(format!("{}/api/auth/login", base_url))
+                    .json(&serde_json::json!({
+                        "username": "e2e_test_user",
+                        "password": test_password
+                    }))
+                    .send()
+                    .await?
+            };
+            let body: serde_json::Value = resp.json().await?;
+            body["token"]
+                .as_str()
+                .ok_or("auth endpoint did not return a token field")
+                .map(str::to_string)?
+        };
+        println!("Obtained auth token for e2e test user");
+
+
+        Ok(TestEnvironment {
+            _postgres: postgres_container,
+            _app: app_container,
+            base_url,
+
+            grpc_addr,
+
+
+            auth_token,
+
+        })
+    }
+
+    /// Fetch container logs using podman/docker CLI
+    async fn fetch_container_logs(container_id: &str) {
+        // Try podman first, then docker
+        let output = tokio::process::Command::new("podman")
+            .args(["logs", "--tail", "50", container_id])
+            .output()
+            .await
+            .or_else(|_| {
+                std::process::Command::new("docker")
+                    .args(["logs", "--tail", "50", container_id])
+                    .output()
+            });
+        
+        match output {
+            Ok(output) => {
+                if !output.stdout.is_empty() {
+                    println!("[STDOUT]\n{}", String::from_utf8_lossy(&output.stdout));
+                }
+                if !output.stderr.is_empty() {
+                    println!("[STDERR]\n{}", String::from_utf8_lossy(&output.stderr));
+                }
+            }
+            Err(e) => println!("Failed to fetch logs: {}", e),
+        }
+    }
+
+    /// Wait for the application to be healthy while streaming logs
+    async fn wait_for_healthy_with_logs(
+        base_url: &str,
+        container_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let client = reqwest::Client::new();
+        let health_url = format!("{}/api/health", base_url);
+
+        for attempt in 1..=30 {
+            // Check health first
+            match client.get(&health_url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    println!("App is healthy after {} attempts", attempt);
+                    return Ok(());
+                }
+                Ok(response) => {
+                    println!(
+                        "Attempt {}: Health check returned status {}",
+                        attempt,
+                        response.status()
+                    );
+                }
+                Err(e) => {
+                    println!("Attempt {}: Health check failed: {}", attempt, e);
+                }
+            }
+            
+            // Print logs every 5 attempts or on final attempt
+            if attempt % 5 == 0 || attempt == 30 {
+                println!("=== Container logs (attempt {}) ===", attempt);
+                Self::fetch_container_logs(container_id).await;
+                println!("=== End logs ===");
+            }
+            
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        }
+
+        // Final log dump before failing
+        println!("=== Final container logs ===");
+        Self::fetch_container_logs(container_id).await;
+        println!("=== End final logs ===");
+
+        Err("App failed to become healthy within timeout".into())
+    }
+}
+
+/// Rstest fixture for the test environment (containers)
+#[fixture]
+pub async fn test_env() -> Arc<Mutex<TestEnvironment>> {
+    TestEnvironment::get_or_init().await
+}
+
+/// Rstest fixture for the base URL
+#[fixture]
+pub async fn base_url(#[future] test_env: Arc<Mutex<TestEnvironment>>) -> String {
+    let env = test_env.await;
+    let guard = env.lock().await;
+    guard.base_url.clone()
+}
+
+
+
+
+/// Rstest fixture for the gRPC endpoint address
+#[fixture]
+pub async fn grpc_addr(#[future] test_env: Arc<Mutex<TestEnvironment>>) -> String {
+    let env = test_env.await;
+    let guard = env.lock().await;
+    guard.grpc_addr.clone()
+}
+
+
+/// Rstest fixture for HTTP client (API tests)
+#[fixture]
+pub fn http_client() -> reqwest::Client {
+    reqwest::Client::new()
+}
+
+
+/// Rstest fixture that resolves the bearer token for the shared e2e test user.
+#[fixture]
+pub async fn auth_token(#[future] test_env: Arc<Mutex<TestEnvironment>>) -> String {
+    let env = test_env.await;
+    let guard = env.lock().await;
+    guard.auth_token.clone()
+}
+
+/// Rstest fixture for an HTTP client pre-configured with the e2e bearer token.
+///
+/// Use this instead of [`http_client`] for requests to endpoints that require
+/// authentication.
+#[fixture]
+pub async fn authed_http_client(#[future] test_env: Arc<Mutex<TestEnvironment>>) -> reqwest::Client {
+    let env = test_env.await;
+    let token = env.lock().await.auth_token.clone();
+    reqwest::Client::builder()
+        .default_headers({
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert(
+                reqwest::header::AUTHORIZATION,
+                format!("Bearer {token}").parse().expect("valid bearer header"),
+            );
+            headers
+        })
+        .build()
+        .expect("failed to build authed HTTP client")
+}
+
+
+
+/// Generated gRPC client types (compiled from proto at build time via grpc-protobuf-build).
+/// Message types use protobuf 4.x UPB backend; service stubs in {proto_name}_service_client modules.
+pub mod proto {
+    grpc::include_proto!("modulaga_config_api");
+}

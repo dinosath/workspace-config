@@ -1,0 +1,55 @@
+[package]
+name = "workspace-config"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
+incremental = false
+overflow-checks = false
+
+[workspace]
+exclude = ["e2e"]
+
+
+
+members = ["migration"]
+
+
+[workspace.dependencies]
+automod = "1.0"
+sea-orm-migration = { version = "2.0", features = ["runtime-tokio-rustls", "sqlx-postgres"], default-features = false }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
+[dependencies]
+automod.workspace = true
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "smallvec"] }
+chrono = { version = "0.4", features = ["serde"] }
+migration = { path = "migration" }
+sea-orm = { version = "2.0", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-uuid"], default-features = false }
+tower-http = { version = "0.6", features = ["set-header"] }
+validator = { version = "0.21", features = ["derive"] }
+tonic = "0.14"
+tonic-prost = "0.14"
+prost = "0.14"
+
+
+tokio.workspace = true
+mimalloc = { version = "0.1.50", features = ["secure"] }
+[dev-dependencies]
+axum-test = "21.1"
+testcontainers = "0.27"
+testcontainers-modules = { version = "0.15", features = ["postgres"] }
+reqwest = { version = "0.13", features = ["json", "cookies"], default-features = false }
+serial_test = "4"
+
+[build-dependencies]
+tonic-prost-build = "0.14"
+protox = "0.9"

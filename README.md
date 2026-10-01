@@ -1,0 +1,1 @@
+# springrs-template

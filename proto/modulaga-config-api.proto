@@ -1,0 +1,196 @@
+
+
+syntax = "proto3";
+
+package modulaga_config_api;
+
+// No well-known proto imports needed
+
+message Empty {}
+
+
+message Application {
+    string id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    optional string exposed_module = 4;
+    optional string manifest_url = 5;
+    optional string menu_entries = 6;
+    optional string name = 7;
+    optional string remote_name = 8;
+    optional string route_path = 9;
+    optional string workspace = 10;
+    
+}
+
+message CreateApplicationRequest {
+    optional string exposed_module = 1;
+    optional string manifest_url = 2;
+    optional string menu_entries = 3;
+    optional string name = 4;
+    optional string remote_name = 5;
+    optional string route_path = 6;
+    optional string workspace = 7;
+    
+}
+
+message UpdateApplicationRequest {
+    string id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    optional string exposed_module = 4;
+    optional string manifest_url = 5;
+    optional string menu_entries = 6;
+    optional string name = 7;
+    optional string remote_name = 8;
+    optional string route_path = 9;
+    optional string workspace = 10;
+    
+}
+
+message GetApplicationRequest {
+  string id = 1;
+}
+
+message DeleteApplicationRequest {
+  string id = 1;
+}
+
+message ListApplicationsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListApplicationsResponse {
+  repeated Application applications = 1;
+  string next_page_token = 2;
+}
+
+
+message Applications {
+    repeated Application applications = 2;
+}
+
+service ApplicationService {
+  rpc Create(CreateApplicationRequest) returns (Application);
+  rpc Get(GetApplicationRequest) returns (Application);
+  rpc Update(UpdateApplicationRequest) returns (Application);
+  rpc Delete(DeleteApplicationRequest) returns (Empty);
+  rpc List(ListApplicationsRequest) returns (ListApplicationsResponse);
+}
+
+
+message MenuEntry {
+    string id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    optional string application = 4;
+    optional string label = 5;
+    optional string position = 6;
+    
+}
+
+message CreateMenuEntryRequest {
+    optional string application = 1;
+    optional string label = 2;
+    optional string position = 3;
+    
+}
+
+message UpdateMenuEntryRequest {
+    string id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    optional string application = 4;
+    optional string label = 5;
+    optional string position = 6;
+    
+}
+
+message GetMenuEntryRequest {
+  string id = 1;
+}
+
+message DeleteMenuEntryRequest {
+  string id = 1;
+}
+
+message ListMenuEntriesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListMenuEntriesResponse {
+  repeated MenuEntry menu_entries = 1;
+  string next_page_token = 2;
+}
+
+
+message MenuEntries {
+    repeated MenuEntry menu_entries = 2;
+}
+
+service MenuEntryService {
+  rpc Create(CreateMenuEntryRequest) returns (MenuEntry);
+  rpc Get(GetMenuEntryRequest) returns (MenuEntry);
+  rpc Update(UpdateMenuEntryRequest) returns (MenuEntry);
+  rpc Delete(DeleteMenuEntryRequest) returns (Empty);
+  rpc List(ListMenuEntriesRequest) returns (ListMenuEntriesResponse);
+}
+
+
+message Workspace {
+    string id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    optional string applications = 4;
+    optional string name = 5;
+    
+}
+
+message CreateWorkspaceRequest {
+    optional string applications = 1;
+    optional string name = 2;
+    
+}
+
+message UpdateWorkspaceRequest {
+    string id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    optional string applications = 4;
+    optional string name = 5;
+    
+}
+
+message GetWorkspaceRequest {
+  string id = 1;
+}
+
+message DeleteWorkspaceRequest {
+  string id = 1;
+}
+
+message ListWorkspacesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListWorkspacesResponse {
+  repeated Workspace workspaces = 1;
+  string next_page_token = 2;
+}
+
+
+message Workspaces {
+    repeated Workspace workspaces = 2;
+}
+
+service WorkspaceService {
+  rpc Create(CreateWorkspaceRequest) returns (Workspace);
+  rpc Get(GetWorkspaceRequest) returns (Workspace);
+  rpc Update(UpdateWorkspaceRequest) returns (Workspace);
+  rpc Delete(DeleteWorkspaceRequest) returns (Empty);
+  rpc List(ListWorkspacesRequest) returns (ListWorkspacesResponse);
+}
+

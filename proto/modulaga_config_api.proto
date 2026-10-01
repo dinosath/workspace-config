@@ -1,0 +1,167 @@
+syntax = "proto3";
+
+package modulaga_config_api;
+
+message Empty {}
+
+message Application {
+    string id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    string exposed_module = 4;
+    string manifest_url = 5;
+    string name = 7;
+    string remote_name = 8;
+    string route_path = 9;
+    string workspace = 10;
+    
+}
+
+message CreateApplicationRequest {
+    string exposed_module = 1;
+    string manifest_url = 2;
+    string name = 4;
+    string remote_name = 5;
+    string route_path = 6;
+    string workspace = 7;
+    
+}
+
+message UpdateApplicationRequest {
+    string id = 1;
+    reserved 2, 3;
+    string exposed_module = 4;
+    string manifest_url = 5;
+    string name = 7;
+    string remote_name = 8;
+    string route_path = 9;
+    string workspace = 10;
+    
+}
+
+message GetApplicationRequest {
+  string id = 1;
+}
+
+message DeleteApplicationRequest {
+  string id = 1;
+}
+
+message ListApplicationsRequest {
+  int32 page_size = 1;
+  // Offset of the first item, as returned in next_page_token; empty for the first page.
+  string page_token = 2;
+}
+
+message ListApplicationsResponse {
+  repeated Application applications = 1;
+  string next_page_token = 2;
+}
+
+service ApplicationService {
+  rpc Create(CreateApplicationRequest) returns (Application);
+  rpc Get(GetApplicationRequest) returns (Application);
+  rpc Update(UpdateApplicationRequest) returns (Application);
+  rpc Delete(DeleteApplicationRequest) returns (Empty);
+  rpc List(ListApplicationsRequest) returns (ListApplicationsResponse);
+}
+
+message MenuEntry {
+    string id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    string application = 4;
+    string label = 5;
+    int64 position = 6;
+    
+}
+
+message CreateMenuEntryRequest {
+    string application = 1;
+    string label = 2;
+    int64 position = 3;
+    
+}
+
+message UpdateMenuEntryRequest {
+    string id = 1;
+    reserved 2, 3;
+    string application = 4;
+    string label = 5;
+    int64 position = 6;
+    
+}
+
+message GetMenuEntryRequest {
+  string id = 1;
+}
+
+message DeleteMenuEntryRequest {
+  string id = 1;
+}
+
+message ListMenuEntriesRequest {
+  int32 page_size = 1;
+  // Offset of the first item, as returned in next_page_token; empty for the first page.
+  string page_token = 2;
+}
+
+message ListMenuEntriesResponse {
+  repeated MenuEntry menu_entries = 1;
+  string next_page_token = 2;
+}
+
+service MenuEntryService {
+  rpc Create(CreateMenuEntryRequest) returns (MenuEntry);
+  rpc Get(GetMenuEntryRequest) returns (MenuEntry);
+  rpc Update(UpdateMenuEntryRequest) returns (MenuEntry);
+  rpc Delete(DeleteMenuEntryRequest) returns (Empty);
+  rpc List(ListMenuEntriesRequest) returns (ListMenuEntriesResponse);
+}
+
+message Workspace {
+    string id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    string name = 5;
+    
+}
+
+message CreateWorkspaceRequest {
+    string name = 2;
+    
+}
+
+message UpdateWorkspaceRequest {
+    string id = 1;
+    reserved 2, 3;
+    string name = 5;
+    
+}
+
+message GetWorkspaceRequest {
+  string id = 1;
+}
+
+message DeleteWorkspaceRequest {
+  string id = 1;
+}
+
+message ListWorkspacesRequest {
+  int32 page_size = 1;
+  // Offset of the first item, as returned in next_page_token; empty for the first page.
+  string page_token = 2;
+}
+
+message ListWorkspacesResponse {
+  repeated Workspace workspaces = 1;
+  string next_page_token = 2;
+}
+
+service WorkspaceService {
+  rpc Create(CreateWorkspaceRequest) returns (Workspace);
+  rpc Get(GetWorkspaceRequest) returns (Workspace);
+  rpc Update(UpdateWorkspaceRequest) returns (Workspace);
+  rpc Delete(DeleteWorkspaceRequest) returns (Empty);
+  rpc List(ListWorkspacesRequest) returns (ListWorkspacesResponse);
+}
