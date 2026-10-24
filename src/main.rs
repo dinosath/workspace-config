@@ -1,7 +1,7 @@
 use mimalloc::MiMalloc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use modulaga_config_api::app_state::AppState;
-use modulaga_config_api::grpc::{application, menu_entry, workspace};
+use workspace_config::app_state::AppState;
+use workspace_config::grpc::{application, menu_entry, workspace};
 use tonic::codegen::http::{header, HeaderName, HeaderValue};
 use tower_http::set_header::SetResponseHeaderLayer;
 #[global_allocator]
